@@ -66,7 +66,7 @@ def generate_report(request, testconfig):
     if not generate:
         return lambda _: None
 
-    directory = weakget(testconfig)["hyperfoil"]["report_dir"] % None
+    directory = weakget(testconfig)["hyperfoil"]["reports_dir"] % None
     if not directory:
         warnings.warn("Unable to save report, report_dir is missing in configuration")
         return lambda _: None
