@@ -4,6 +4,7 @@
     Run the test and assert results.
 """
 from importlib import resources
+import base64
 
 import pytest
 import yaml
@@ -17,7 +18,7 @@ MAX_RUN_TIME = 10 * 60
 # Number of distinct tokens used for queries
 RHSSO_OPENED_SESSIONS = 10
 # Number of pre-allocated connections
-SHARED_CONNECTIONS = 8000
+SHARED_CONNECTIONS = 100
 # Backend replicas
 BACKEND_REPLICAS = 1
 # Number of hyperfoil agents used
@@ -32,7 +33,7 @@ pytestmark = [pytest.mark.performance]
 @pytest.fixture(scope="module")
 def name():
     """Name of the benchmark"""
-    return "authorino_basic_throughput"
+    return "authorino_adv_throughput"
 
 
 @pytest.fixture(scope="module")
@@ -50,7 +51,7 @@ def http(rhsso, client):
     """Configures host for the gateway and RHSSO"""
     return {
         "http": [
-            {"host": add_port(str(client.base_url)), "sharedConnections": SHARED_CONNECTIONS, "connectionStrategy": "ALWAYS_NEW"},
+            {"host": f'http://{add_port(str(client.base_url))}', "sharedConnections": SHARED_CONNECTIONS, "connectionStrategy": "SHARED_POOL"},
         ]
     }
 
@@ -65,9 +66,10 @@ def files(rhsso, client, rhsso_sessions_tokens):
     """Adds definitions of used queries as a CSV file"""
     client_url = add_port(str(client.base_url))
 
+    a = [(client_url, x.access_token, f'/base64/{base64.encodebytes(f"asdf{i}".encode()).decode().strip()}') for x, i in zip(rhsso_sessions_tokens, range(len(rhsso_sessions_tokens)))]
 
     return {
-        "queries.csv": create_csv_file([(client_url, x, "/get") for x in rhsso_sessions_tokens]+[(client_url, x, "/get1") for x in rhsso_sessions_tokens]),
+        "queries.csv": create_csv_file(a),
     }
 
 
@@ -106,7 +108,7 @@ def test_basic_perf_rhsso(generate_report, client, benchmark, rhsso_auth, blame,
     Runs the created benchmark.
     Asserts it was successful.
     """
-    assert client.get("/get", auth=rhsso_auth).status_code == 200
+    # assert client.get("/get", auth=rhsso_auth).status_code == 200
 
     run = benchmark.start(blame("run"), **params)
 

@@ -9,6 +9,37 @@ import yaml
 from apyproxy import ApyProxy
 
 
+class TagSafeLoader(yaml.SafeLoader):
+    pass
+
+
+class TagSafeDumper(yaml.SafeDumper):
+    pass
+
+
+class GenericScalar:
+    def __init__(self, value, tag, style=None):
+        self._value = value
+        self._tag = tag
+        self._style = style
+
+    @staticmethod
+    def to_yaml(dumper, data):
+        # data is a GenericScalar
+        return dumper.represent_scalar(data._tag, data._value, style=data._style)
+
+
+def default_constructor(loader, tag_suffix, node):
+    if isinstance(node, yaml.ScalarNode):
+        return GenericScalar(node.value, tag_suffix, style=node.style)
+    else:
+        raise NotImplementedError('Node: ' + str(type(node)))
+
+
+yaml.add_multi_constructor('', default_constructor, Loader=TagSafeLoader)
+yaml.add_representer(GenericScalar, GenericScalar.to_yaml, Dumper=TagSafeDumper)
+
+
 class StartedRun:
     """Hyperfoil run that was already started"""
 
@@ -51,7 +82,7 @@ class Benchmark:
         """Starts the Benchmark and returns a specific Run that was started"""
         run_id = (
             self.client.benchmark._(self.name)
-            .start.get(params={"templateParam": params, "validate": validate, "desc": desc})
+            .start.get(params={"templateParam": [f'{k}={v}' for k, v in params.items()], "validate": validate, "desc": desc})
             .json()["id"]
         )
         return StartedRun(self.client, run_id)
@@ -91,6 +122,6 @@ class Hyperfoil:
         if "http" not in benchmark:
             benchmark["http"] = http["http"]
         benchmark["name"] = name
-        files = {"benchmark": StringIO(yaml.dump(benchmark)), **additional_files}  # type: ignore
+        files = {"benchmark": StringIO(yaml.dump(benchmark, Dumper=TagSafeDumper)), **additional_files}  # type: ignore
         self.client.benchmark.post(files=files)
         return Benchmark(self.client, name)
